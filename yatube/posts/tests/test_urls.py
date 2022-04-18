@@ -74,7 +74,8 @@ class PostURLTest(TestCase):
 
     def test_profile_url_exists_at_desired_location(self):
         """Страница profile доступна авторизованному пользователю."""
-        response = self.authorized_client.get(f'/profile/{self.user.username}/')
+        response = self.authorized_client.get(
+            f'/profile/{self.user.username}/')
         self.assertEqual(response.status_code, 200)
 
     def test_posts_url_exists_at_desired_location(self):
