@@ -13,7 +13,7 @@ from .models import Comment, Follow, Group, Post, User
 
 def index(request: HttpRequest) -> HttpResponse:
     """Создание страницы со свежими постами."""
-    post_list = Post.objects.all()
+    post_list = Post.objects.select_related('group').all()
     paginator = Paginator(post_list, PAGES)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
@@ -170,10 +170,8 @@ def profile_follow(request: HttpRequest, username: str) -> HttpResponse:
     """Функция, позволяющая подписаться на авторов."""
     author = get_object_or_404(User, username=username)
     user = request.user
-    following = Follow.objects.filter(
-        user=user, author=author).exists()
-    if author != user and not following:
-        Follow.objects.create(author=author, user=user)
+    if author != user:
+        Follow.objects.get_or_create(author=author, user=user)
     return redirect('posts:profile', author)
 
 

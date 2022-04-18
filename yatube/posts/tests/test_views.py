@@ -229,18 +229,26 @@ class PostViewsTest(TestCase):
 
     def test_follow_author(self):
         """Зарегистрированный пользователь может
-        подписаться и отписываться от авторов."""
+        подписаться на авторов."""
         follow_count_before = Follow.objects.count()
         self.authorized_client_follow.get(
             reverse('posts:profile_follow',
                     kwargs={'username': f'{self.user.username}'}))
         follow_count_after = Follow.objects.count()
         self.assertEqual(follow_count_after, follow_count_before + 1)
+
+    def test_unfollow_author(self):
+        """Зарегистрированный пользователь может
+        отписаться от авторов."""
+        self.authorized_client_follow.get(
+            reverse('posts:profile_follow',
+                    kwargs={'username': f'{self.user.username}'}))
+        follow_count_before = Follow.objects.count()
         self.authorized_client_follow.get(
             reverse('posts:profile_unfollow',
                     kwargs={'username': f'{self.user.username}'}))
         follow_count_after = Follow.objects.count()
-        self.assertEqual(follow_count_after, follow_count_before)
+        self.assertEqual(follow_count_after, follow_count_before - 1)
 
     def test_follow_author2(self):
         """Незарегистрированный пользователь не может
