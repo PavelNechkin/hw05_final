@@ -1,8 +1,9 @@
-from django.db import models
 from django.contrib.auth import get_user_model
-from .validators import validate_not_empty
+from django.db import models
 
 from core.models import CreatedModel
+
+from .validators import validate_not_empty
 
 User = get_user_model()
 

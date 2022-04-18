@@ -1,15 +1,14 @@
 from datetime import datetime
 
-from django.http import HttpRequest
-from django.http import HttpResponse
-from django.core.paginator import Paginator
-from django.shortcuts import render, redirect
-from django.shortcuts import get_object_or_404
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
+from django.http import HttpRequest, HttpResponse
+from django.shortcuts import get_object_or_404, redirect, render
 
 from yatube.settings import PAGES
-from .models import Follow, Post, Group, User, Comment
-from .forms import PostForm, CommentForm
+
+from .forms import CommentForm, PostForm
+from .models import Comment, Follow, Group, Post, User
 
 
 def index(request: HttpRequest) -> HttpResponse:
@@ -40,9 +39,16 @@ def group_posts(request: HttpRequest, slug: str) -> HttpResponse:
 
 def profile(request: HttpRequest, username: str) -> HttpResponse:
     """Создание страницы профиля."""
+    user = request.user
     author = get_object_or_404(User, username=username)
     posts = author.posts.all()
     count_posts = author.posts.count
+    if request.user.is_authenticated:
+        following = Follow.objects.filter(
+            user=user, author=author
+        ).exists()
+    else:
+        following = False
     paginator = Paginator(posts, PAGES)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
@@ -51,9 +57,9 @@ def profile(request: HttpRequest, username: str) -> HttpResponse:
         'posts': posts,
         'page_obj': page_obj,
         'count_posts': count_posts,
-
+        'following': following,
     }
-    return render(request, 'posts/profile.html', context)
+    return render(request, 'posts/profile.html', context,)
 
 
 def post_detail(request: HttpRequest, post_id: int) -> HttpResponse:
@@ -163,24 +169,12 @@ def follow_index(request: HttpRequest) -> HttpResponse:
 def profile_follow(request: HttpRequest, username: str) -> HttpResponse:
     """Функция, позволяющая подписаться на авторов."""
     author = get_object_or_404(User, username=username)
-    count_posts = author.posts.count
-    posts = author.posts.all()
     user = request.user
     following = Follow.objects.filter(
         user=user, author=author).exists()
-    if author != user and following is False:
+    if author != user and not following:
         Follow.objects.create(author=author, user=user)
-    paginator = Paginator(posts, PAGES)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
-    context = {
-        'author': author,
-        'posts': posts,
-        'page_obj': page_obj,
-        'count_posts': count_posts,
-        'following': following,
-    }
-    return render(request, 'posts/profile.html', context)
+    return redirect('posts:profile', author)
 
 
 @login_required
@@ -189,19 +183,5 @@ def profile_unfollow(request: HttpRequest, username: str) -> HttpResponse:
     author = get_object_or_404(User, username=username)
     user = request.user
     follower = get_object_or_404(Follow, user=user, author=author)
-    count_posts = author.posts.count
-    posts = author.posts.all()
     follower.delete()
-    following = Follow.objects.filter(
-        user=user, author=author).exists()
-    paginator = Paginator(posts, PAGES)
-    page_number = request.GET.get('page')
-    page_obj = paginator.get_page(page_number)
-    context = {
-        'author': author,
-        'posts': posts,
-        'page_obj': page_obj,
-        'count_posts': count_posts,
-        'following': following,
-    }
-    return render(request, 'posts/profile.html', context)
+    return redirect('posts:profile', author)

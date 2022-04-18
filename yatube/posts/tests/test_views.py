@@ -1,14 +1,15 @@
 import shutil
 import tempfile
 
-from django.test import TestCase, Client, override_settings
-from django.core.files.uploadedfile import SimpleUploadedFile
-from django.contrib.auth import get_user_model
-from django.urls import reverse
 from django import forms
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import Client, TestCase, override_settings
+from django.urls import reverse
 
-from ..models import Group, Post, Comment, Follow
+from ..models import Comment, Follow, Group, Post
 
 User = get_user_model()
 
@@ -52,6 +53,10 @@ class PostViewsTest(TestCase):
             group=cls.group,
             image='posts/small.gif'
         )
+        # cls.post_follow = Post.objects.create(
+        #     author=cls.user2,
+        #     text='Тестовый пост для проверки подписок',
+        # )
         cls.comment = Comment.objects.create(
             post=cls.post,
             author=cls.user,
@@ -67,6 +72,8 @@ class PostViewsTest(TestCase):
         self.guest_client = Client()
         self.authorized_client = Client()
         self.authorized_client.force_login(self.user)
+        self.authorized_client_follow = Client()
+        self.authorized_client_follow.force_login(self.user2)
         self.author_client = Client()
         self.author_client.force_login(self.user)
 
@@ -215,16 +222,25 @@ class PostViewsTest(TestCase):
         response_after = self.author_client.get(reverse('posts:index'))
         cache_after = response_after.content
         self.assertEqual(cache_before, cache_after)
+        cache.clear()
+        response_after = self.author_client.get(reverse('posts:index'))
+        cache_after = response_after.content
+        self.assertNotEqual(cache_before, cache_after)
 
     def test_follow_author(self):
         """Зарегистрированный пользователь может
-        подписаться на авторов."""
+        подписаться и отписываться от авторов."""
         follow_count_before = Follow.objects.count()
-        self.authorized_client.get(
+        self.authorized_client_follow.get(
             reverse('posts:profile_follow',
-                    kwargs={'username': f'{self.user2.username}'}))
+                    kwargs={'username': f'{self.user.username}'}))
         follow_count_after = Follow.objects.count()
         self.assertEqual(follow_count_after, follow_count_before + 1)
+        self.authorized_client_follow.get(
+            reverse('posts:profile_unfollow',
+                    kwargs={'username': f'{self.user.username}'}))
+        follow_count_after = Follow.objects.count()
+        self.assertEqual(follow_count_after, follow_count_before)
 
     def test_follow_author2(self):
         """Незарегистрированный пользователь не может
@@ -232,9 +248,49 @@ class PostViewsTest(TestCase):
         follow_count_before = Follow.objects.count()
         self.guest_client.get(
             reverse('posts:profile_follow',
-                    kwargs={'username': f'{self.user2.username}'}))
+                    kwargs={'username': f'{self.user.username}'}))
         follow_count_after = Follow.objects.count()
         self.assertEqual(follow_count_after, follow_count_before)
+
+    def test_feed(self):
+        """Пост понравившегося автора появляется в ленте у подписчика
+        с правильным контекстом."""
+        self.authorized_client_follow.get(
+            reverse('posts:profile_follow',
+                    kwargs={'username': f'{self.user.username}'}))
+        response = self.authorized_client_follow.get(
+            reverse('posts:follow_index'))
+        first_post = response.context.get('page_obj')[0]
+        self.assertEqual(
+            first_post.text,
+            self.post.text)
+        self.assertEqual(
+            first_post.author.username,
+            self.post.author.username)
+        self.assertEqual(
+            first_post.group.title,
+            self.post.group.title)
+        self.assertNotEqual(
+            first_post.group.title,
+            self.group2.title)
+        self.assertEqual(
+            first_post.pub_date,
+            self.post.pub_date)
+        self.assertEqual(
+            first_post.image,
+            self.post.image)
+
+    def test_feed2(self):
+        """Пост понравившегося автора не появляется в ленте,
+        если нет подписки."""
+        self.authorized_client_follow.get(
+            reverse('posts:profile_follow',
+                    kwargs={'username': f'{self.user2.username}'}))
+        response = self.authorized_client_follow.get(
+            reverse('posts:follow_index'))
+        self.assertNotContains(
+            response,
+            self.post.text)
 
 
 class PaginatorViewsTest(TestCase):
